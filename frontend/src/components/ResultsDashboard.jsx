@@ -1,124 +1,165 @@
-import React from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
+import TopicAnalysis from './TopicAnalysis';
 
-const ResultsDashboard = ({ result, sentimentResult, decisionInfo }) => {
-  const score = result.score * 100;
+const ResultsDashboard = ({ result, sentimentResult, decisionInfo, topicAnalysis }) => {
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [selectedVerdict, setSelectedVerdict] = useState(null);
+
+  const submitAdminFeedback = async (verdict) => {
+    setFeedbackLoading(true);
+    setSelectedVerdict(verdict);
+    
+    try {
+      await axios.post('http://localhost:8000/api/admin-feedback', {
+        original_text: result.original_text,
+        model_decision: result.decision,
+        model_score: result.score,
+        user_verdict: verdict,
+        topic_category: topicAnalysis?.topic_category || null,
+        model_predictions: result.models
+      });
+      
+      setFeedbackSubmitted(true);
+      // Ne sklanjamo dialog automatski - ostaje zahvala
+      // setTimeout(() => setFeedbackSubmitted(false), 3000); // OVO UKLONI
+    } catch (error) {
+      console.error('Feedback error:', error);
+      alert('Error sending feedback');
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
+  // Only show feedback buttons for ADMIN_REVIEW AND not yet submitted
+  const showFeedbackButtons = result.decision === 'ADMIN_REVIEW' && !feedbackSubmitted;
 
   return (
     <div className="space-y-6">
-      {/* Severity Meter */}
-      <div className="card p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <span className="text-3xl">📊</span>
-          <h3 className="text-xl font-bold text-gray-800">Nivo ozbiljnosti</h3>
+      {/* Decision Banner */}
+      <div 
+        className="rounded-2xl p-6 animate-fadeInUp"
+        style={{ 
+          background: decisionInfo.gradient,
+          border: `2px solid ${decisionInfo.borderColor}`
+        }}
+      >
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <span className="text-5xl animate-bounce">{decisionInfo.emoji}</span>
+            <div>
+              <h2 className="text-2xl font-bold" style={{ color: decisionInfo.color }}>
+                {decisionInfo.label}
+              </h2>
+              <p className="text-gray-600 mt-1">
+                Analysis score: {(result.score * 100).toFixed(1)}%
+              </p>
+            </div>
+          </div>
+          {result.direct_threat && (
+            <div className="bg-red-100 text-red-700 px-4 py-2 rounded-full font-semibold animate-pulse">
+              🚨 DIRECT THREAT DETECTED
+            </div>
+          )}
         </div>
-        
-        <div className="relative">
-          <div className="flex justify-between mb-3 text-sm font-semibold">
-            <span className="text-green-600 flex items-center gap-1">
-              <span>✅</span> Sigurno
-            </span>
-            <span className="text-red-500 flex items-center gap-1">
-              <span>🚨</span> Opasno
-            </span>
+      </div>
+
+      {/* Score Bar */}
+      <div className="card p-5">
+        <div className="flex justify-between text-sm text-gray-600 mb-2">
+          <span>📊 Threat Level</span>
+          <span className="font-bold">{(result.score * 100).toFixed(1)}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-3">
+          <div 
+            className="h-3 rounded-full transition-all duration-700"
+            style={{ 
+              width: `${result.score * 100}%`,
+              background: `linear-gradient(90deg, ${decisionInfo.color}80, ${decisionInfo.color})`
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ADMIN REVIEW – confirmation buttons (only if not submitted) */}
+      {showFeedbackButtons && (
+        <div className="card p-5 border-2 border-yellow-400 bg-yellow-50">
+          <div className="flex items-start gap-3 mb-4">
+            <span className="text-3xl">⚠️</span>
+            <div>
+              <h3 className="font-bold text-yellow-800">System is not certain</h3>
+              <p className="text-sm text-yellow-700 mt-1">
+                The AI model could not determine with certainty whether this is cyberbullying.
+                <br />Your feedback will help improve the system.
+              </p>
+            </div>
           </div>
           
-          <div className="severity-bar">
-            <div 
-              className="severity-bar-fill"
-              style={{ 
-                width: `${score}%`,
-                background: score > 70 
-                  ? 'linear-gradient(90deg, #f87171, #ef4444)' 
-                  : score > 30 
-                    ? 'linear-gradient(90deg, #fbbf24, #f59e0b)' 
-                    : 'linear-gradient(90deg, #34d399, #22c55e)'
-              }}
-            ></div>
+          <div className="flex gap-3 mt-3">
+            <button
+              onClick={() => submitAdminFeedback('BULLYING_DETECTED')}
+              disabled={feedbackLoading}
+              className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {feedbackLoading && selectedVerdict === 'BULLYING_DETECTED' ? (
+                <span className="animate-spin">⏳</span>
+              ) : (
+                <span>🚨</span>
+              )}
+              This IS Cyberbullying
+            </button>
+            <button
+              onClick={() => submitAdminFeedback('SAFE')}
+              disabled={feedbackLoading}
+              className="flex-1 px-4 py-3 bg-green-500 text-white rounded-xl font-semibold hover:bg-green-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {feedbackLoading && selectedVerdict === 'SAFE' ? (
+                <span className="animate-spin">⏳</span>
+              ) : (
+                <span>✅</span>
+              )}
+              This is NOT Cyberbullying
+            </button>
           </div>
-          
-          <div className="text-center mt-6">
-            <div className="inline-flex items-center gap-3 px-6 py-3 rounded-2xl" 
-                 style={{ background: decisionInfo.bgColor, border: `2px solid ${decisionInfo.borderColor}` }}>
-              <span className="text-4xl">{decisionInfo.emoji}</span>
-              <div className="text-left">
-                <p className="text-3xl font-black" style={{ color: decisionInfo.color }}>
-                  {score.toFixed(1)}%
-                </p>
-                <p className="text-sm font-medium" style={{ color: decisionInfo.color }}>
-                  Bullying Score
-                </p>
-              </div>
+        </div>
+      )}
+
+      {/* Thank you message after feedback (shown instead of buttons) */}
+      {result.decision === 'ADMIN_REVIEW' && feedbackSubmitted && (
+        <div className="card p-5 border-2 border-green-400 bg-green-50">
+          <div className="text-center py-3">
+            <p className="text-green-700 font-medium">✅ Thank you for your feedback!</p>
+            <p className="text-green-600 text-sm mt-1">Your response has been saved to improve the model.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Topic Analysis */}
+      {topicAnalysis && topicAnalysis.is_analyzed !== false && (
+        <TopicAnalysis topicAnalysis={topicAnalysis} />
+      )}
+
+      {/* Sentiment Preview */}
+      {sentimentResult && (
+        <div className="card p-5">
+          <h3 className="font-semibold text-gray-800 mb-3">😊 Sentiment Analysis</h3>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-green-50 rounded-xl p-3">
+              <div className="text-green-600 font-bold">{(sentimentResult.positive * 100).toFixed(0)}%</div>
+              <div className="text-xs text-gray-500">Positive</div>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3">
+              <div className="text-gray-600 font-bold">{(sentimentResult.neutral * 100).toFixed(0)}%</div>
+              <div className="text-xs text-gray-500">Neutral</div>
+            </div>
+            <div className="bg-red-50 rounded-xl p-3">
+              <div className="text-red-600 font-bold">{(sentimentResult.negative * 100).toFixed(0)}%</div>
+              <div className="text-xs text-gray-500">Negative</div>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Score Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <ScoreCard 
-          emoji="🎯"
-          title="Odluka sistema"
-          value={result.decision.replace('_', ' ')}
-          color={decisionInfo.color}
-          bgColor={decisionInfo.bgColor}
-        />
-        <ScoreCard 
-          emoji="📈"
-          title="Ukupni Score"
-          value={`${score.toFixed(1)}%`}
-          color={decisionInfo.color}
-          bgColor={decisionInfo.bgColor}
-        />
-        <ScoreCard 
-          emoji="😊"
-          title="Sentiment"
-          value={sentimentResult?.sentiment || 'N/A'}
-          color={sentimentResult?.compound > 0 ? '#22c55e' : sentimentResult?.compound < 0 ? '#ef4444' : '#f59e0b'}
-          bgColor={sentimentResult?.compound > 0 ? '#f0fdf4' : sentimentResult?.compound < 0 ? '#fef2f2' : '#fffbeb'}
-        />
-      </div>
-
-      {/* Key Indicators */}
-      <div className="card p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <span className="text-3xl">🔑</span>
-          <h3 className="text-xl font-bold text-gray-800">Ključni indikatori</h3>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {Object.entries(result.models.jigsaw).map(([key, value]) => (
-            <IndicatorBadge key={key} label={key.replace(/_/g, ' ')} value={value} />
-          ))}
-          <IndicatorBadge label="Hate Speech" value={result.models.hate_speech.hate} />
-          <IndicatorBadge label="Implicit Bully" value={result.models.implicit.bullying_prob} />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const ScoreCard = ({ emoji, title, value, color, bgColor }) => (
-  <div className="card p-6" style={{ borderTop: `4px solid ${color}` }}>
-    <div className="flex items-center gap-3 mb-3">
-      <span className="text-2xl">{emoji}</span>
-      <span className="text-sm font-semibold text-gray-500 uppercase tracking-wide">{title}</span>
-    </div>
-    <div className="text-2xl font-black" style={{ color }}>
-      {value}
-    </div>
-  </div>
-);
-
-const IndicatorBadge = ({ label, value }) => {
-  const isHigh = value > 0.5;
-  return (
-    <div className={`px-4 py-3 rounded-xl text-sm font-semibold flex justify-between items-center transition-all hover:scale-105 ${
-      isHigh 
-        ? 'bg-red-50 border-2 border-red-200 text-red-700' 
-        : 'bg-green-50 border-2 border-green-200 text-green-700'
-    }`}>
-      <span className="capitalize">{label}</span>
-      <span className="font-black text-base">{(value * 100).toFixed(0)}%</span>
+      )}
     </div>
   );
 };

@@ -18,6 +18,7 @@ function App() {
   const [sentimentResult, setSentimentResult] = useState(null);
   const [summaryResult, setSummaryResult] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [topicAnalysis, setTopicAnalysis] = useState(null);
 
   const handleAnalyze = async (text) => {
     setLoading(true);
@@ -35,9 +36,15 @@ function App() {
       setNerResult(nerRes.data);
       setSentimentResult(sentimentRes.data);
       setSummaryResult(summaryRes.data);
+      if (analysisRes.data.topic_analysis) {
+        setTopicAnalysis(analysisRes.data.topic_analysis);
+      } else {
+        setTopicAnalysis(null);
+      }
+
     } catch (error) {
       console.error('API Error:', error);
-      alert('⚠️ Greška pri analizi. Provjerite da li je backend pokrenut na http://localhost:8000');
+      alert('⚠️ Analysis error. Check if backend is running at http://localhost:8000');
     }
     setLoading(false);
   };
@@ -51,7 +58,7 @@ function App() {
           borderColor: '#fecaca',
           emoji: '🚨',
           gradient: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-          label: 'Cyberbullying Detektovan'
+          label: 'Cyberbullying Detected'
         };
       case 'ADMIN_REVIEW':
         return {
@@ -60,7 +67,7 @@ function App() {
           borderColor: '#fde68a',
           emoji: '⚡',
           gradient: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
-          label: 'Administrativna Provjera'
+          label: 'Admin Review'
         };
       case 'SAFE':
         return {
@@ -69,7 +76,7 @@ function App() {
           borderColor: '#bbf7d0',
           emoji: '✅',
           gradient: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-          label: 'Siguran Tekst'
+          label: 'Safe Text'
         };
       default:
         return {
@@ -78,7 +85,7 @@ function App() {
           borderColor: '#e5e7eb',
           emoji: '❓',
           gradient: 'linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%)',
-          label: 'Nepoznato'
+          label: 'Unknown'
         };
     }
   };
@@ -87,10 +94,10 @@ function App() {
 
   const tabs = [
     { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
-    { id: 'models', label: '🤖 Modeli', icon: '🤖' },
-    { id: 'support', label: '💌 Podrška', icon: '💌' },
-    { id: 'entities', label: '🔍 Analiza', icon: '🔍' },
-    { id: 'report', label: '📋 Izvještaj', icon: '📋' },
+    { id: 'models', label: '🤖 Models', icon: '🤖' },
+    { id: 'support', label: '💌 Support', icon: '💌' },
+    { id: 'entities', label: '🔍 Analysis', icon: '🔍' },
+    { id: 'report', label: '📋 Report', icon: '📋' },
   ];
 
   return (
@@ -144,8 +151,8 @@ function App() {
                 🔍
               </span>
             </div>
-            <p className="mt-6 text-gray-600 font-medium text-lg">Analiziram tekst...</p>
-            <p className="text-gray-400 text-sm mt-1">5 AI modela obrađuje vaš unos</p>
+            <p className="mt-6 text-gray-600 font-medium text-lg">Analyzing text...</p>
+            <p className="text-gray-400 text-sm mt-1">5 AI models processing your input</p>
           </div>
         )}
 
@@ -178,6 +185,7 @@ function App() {
                   result={result} 
                   sentimentResult={sentimentResult}
                   decisionInfo={decisionInfo}
+                  topicAnalysis={topicAnalysis}
                 />
               )}
               {activeTab === 'models' && (
@@ -211,20 +219,20 @@ function App() {
               <span className="text-8xl">🔍</span>
             </div>
             <h2 className="text-2xl font-bold text-gray-700 mt-6">
-              Unesite tekst za analizu
+              Enter text for analysis
             </h2>
             <p className="text-gray-500 mt-2 max-w-md mx-auto">
-              Naš sistem će analizirati tekst kroz 5 naprednih AI modela i pružiti detaljan izvještaj
+              Our system will analyze the text through 5 advanced AI models and provide a detailed report
             </p>
             
             {/* Feature cards */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-10 max-w-3xl mx-auto">
               {[
-                { emoji: '🔬', label: 'Detekcija\ntoksičnosti' },
-                { emoji: '🏷️', label: 'Tip\nnapada' },
-                { emoji: '🚫', label: 'Govor\nmržnje' },
-                { emoji: '😊', label: 'Sentiment\nanaliza' },
-                { emoji: '💌', label: 'Podrška\nžrtvi' },
+                { emoji: '🔬', label: 'Toxicity\ndetection' },
+                { emoji: '🏷️', label: 'Attack\ntype' },
+                { emoji: '🚫', label: 'Hate\nspeech' },
+                { emoji: '😊', label: 'Sentiment\nanalysis' },
+                { emoji: '💌', label: 'Victim\nsupport' },
               ].map((item, i) => (
                 <div key={i} className="card p-4 text-center animate-fadeInUp" style={{ animationDelay: `${i * 0.1}s` }}>
                   <span className="text-3xl block mb-2">{item.emoji}</span>

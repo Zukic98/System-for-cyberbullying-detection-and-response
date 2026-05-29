@@ -6,10 +6,10 @@ const ModelPredictions = ({ models }) => {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-        <span>🤖</span> Predikcije svih 5 modela
+        <span>🤖</span> All 5 Model Predictions
       </h2>
       
-      <ModelCard emoji="🔬" title="Model 1: Jigsaw (Toksičnost)" color="#8b5cf6">
+      <ModelCard emoji="🔬" title="Model 1: Jigsaw (Toxicity)" color="#8b5cf6">
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
           {Object.entries(models.jigsaw).map(([key, val]) => (
             <ModelBadge key={key} label={key.replace(/_/g, ' ')} value={val} />
@@ -40,14 +40,14 @@ const ModelPredictions = ({ models }) => {
         </div>
       </ModelCard>
 
-      <ModelCard emoji="🎭" title="Model 4: Formspring (Implicitno)" color="#f59e0b">
+      <ModelCard emoji="🎭" title="Model 4: Formspring (Implicit)" color="#f59e0b">
         <div className="flex gap-4">
           <ModelBadge label="Bullying" value={models.implicit.bullying_prob} />
-          <ModelBadge label="Neutralno" value={models.implicit.neutral_prob} />
+          <ModelBadge label="Neutral" value={models.implicit.neutral_prob} />
         </div>
       </ModelCard>
 
-      <ModelCard emoji="🎯" title="Model 5: OffensEval (Meta napada)" color="#22c55e">
+      <ModelCard emoji="🎯" title="Model 5: OffensEval (Target)" color="#22c55e">
         <div className="flex items-center gap-4 flex-wrap">
           <span className="px-5 py-2.5 rounded-full text-sm font-bold bg-blue-100 text-blue-700 border-2 border-blue-200">
             {models.target.type}

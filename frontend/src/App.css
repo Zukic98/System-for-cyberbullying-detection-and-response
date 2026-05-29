@@ -42,3 +42,13 @@ body {
 .analyzing {
   animation: pulse-glow 2s infinite;
 }
+
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; display: none; }
+}
+
+.animate-fadeOut {
+  animation: fadeOut 3s ease forwards;
+}

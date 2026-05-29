@@ -6,10 +6,13 @@ import torch
 import re
 import numpy as np
 import os
+import csv
+from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from topic_analyzer import TopicAnalyzer
 
 # =====================================================================
-# INICIJALIZACIJA
+# INITIALIZATION
 # =====================================================================
 app = FastAPI(title="Cyberbullying Detection API", version="1.0")
 
@@ -29,7 +32,7 @@ print(f"⚡ Device: {DEVICE}")
 print(f"📂 Models path: {MODELS_PATH}")
 
 # =====================================================================
-# UČITAVANJE MODELA
+# LOAD MODELS
 # =====================================================================
 print("\n📥 Loading models...")
 
@@ -69,10 +72,14 @@ models['target'] = AutoModelForSequenceClassification.from_pretrained(
 mapping_5 = np.load(os.path.join(MODELS_PATH, 'model_5_mapping.npy'), allow_pickle=True).item()
 inv_mapping_5 = {v: k for k, v in mapping_5.items()}
 
+# Model Topic Analyzer
+print("\n📥 Loading Topic Analyzer...")
+topic_analyzer = TopicAnalyzer("./models/topic_model")
+
 print("✅ All models loaded successfully!")
 
 # =====================================================================
-# POMOĆNE FUNKCIJE
+# HELPER FUNCTIONS
 # =====================================================================
 def clean_text(text):
     text = str(text).lower()
@@ -87,13 +94,33 @@ def tokenize(text):
     return {k: v.to(DEVICE) for k, v in enc.items()}
 
 # =====================================================================
-# API MODEL
+# API MODELS
 # =====================================================================
 class TextInput(BaseModel):
     text: str
 
+class AdminFeedbackRequest(BaseModel):
+    original_text: str
+    model_decision: str
+    model_score: float
+    user_verdict: str  # 'BULLYING_DETECTED' or 'SAFE'
+    topic_category: str = None
+    model_predictions: dict = None
+
 # =====================================================================
-# ENDPOINT: Kompletna analiza
+# FEEDBACK SYSTEM
+# =====================================================================
+FEEDBACK_FILE = "./data/admin_feedback.csv"
+
+# Create folder and file if they don't exist
+os.makedirs("./data", exist_ok=True)
+if not os.path.exists(FEEDBACK_FILE):
+    with open(FEEDBACK_FILE, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['timestamp', 'original_text', 'model_decision', 'model_score', 'user_verdict', 'topic_category', 'model_predictions'])
+
+# =====================================================================
+# ENDPOINT: Complete Analysis
 # =====================================================================
 @app.post("/api/analyze")
 async def analyze_text(input: TextInput):
@@ -144,6 +171,11 @@ async def analyze_text(input: TextInput):
             'individual_prob': round(float(out5[ind_idx]), 4) if ind_idx is not None else 0,
             'group_prob': round(float(out5[grp_idx]), 4) if grp_idx is not None else 0
         }
+
+    topic_analysis = None
+    # Only if bullying is detected
+    if results['cyberbullying']['is_bullying'] or results['hate_speech']['hate'] > 0.3 or results['jigsaw']['toxic'] > 0.5:
+        topic_analysis = topic_analyzer.analyze_text(clean)    
     
     # Rule Engine Score
     score = (
@@ -158,7 +190,7 @@ async def analyze_text(input: TextInput):
     if results['implicit']['bullying_prob'] > 0.6: score += 0.10
     if results['target']['type'] in ['IND', 'GRP']: score += 0.10
     
-    # Ekspertska pravila
+    # Expert rules
     text_lower = text.lower()
     threat_patterns = [
         r'\b(i|i\'ll)\s+(kill|murder|hurt|destroy)\s+(you|u)\b',
@@ -169,7 +201,7 @@ async def analyze_text(input: TextInput):
     
     score = min(score, 1.0)
     
-    # Odluka
+    # Decision
     if direct_threat: decision = 'BULLYING_DETECTED'
     elif score >= 0.30: decision = 'BULLYING_DETECTED'
     elif score >= 0.12: decision = 'ADMIN_REVIEW'
@@ -180,6 +212,7 @@ async def analyze_text(input: TextInput):
         'score': round(score, 4),
         'direct_threat': direct_threat,
         'models': results,
+        'topic_analysis': topic_analysis,
         'original_text': text,
         'cleaned_text': clean
     }
@@ -230,11 +263,11 @@ async def extract_entities(input: TextInput):
         return {'entities': {'PER': [], 'LOC': [], 'ORG': [], 'MISC': []}, 'total': 0, 'error': 'spaCy not installed'}
 
 # =====================================================================
-# ENDPOINT: Chatbot podrška
+# ENDPOINT: Chatbot Support
 # =====================================================================
 @app.post("/api/support")
 async def generate_support(input: TextInput):
-    # Prvo analiziraj
+    # First analyze
     analysis = await analyze_text(input)
     
     score = analysis['score']
@@ -242,43 +275,43 @@ async def generate_support(input: TextInput):
     if analysis['decision'] == 'BULLYING_DETECTED':
         if score > 0.7:
             support_message = (
-                "🚨 Žao mi je što ovo proživljavaš. "
-                "Ovo je OZBILJAN oblik cyberbullying-a. "
-                "NISI TI KRIV/A. "
-                "Predlažem: 1) Blokiraj osobu, 2) Sačuvaj dokaze, "
-                "3) Prijavi platformi, 4) Razgovaraj sa odraslom osobom. 💙"
+                "🚨 I'm sorry you're experiencing this. "
+                "This is a SERIOUS form of cyberbullying. "
+                "YOU ARE NOT TO BLAME. "
+                "I suggest: 1) Block the person, 2) Save evidence, "
+                "3) Report to the platform, 4) Talk to a trusted adult. 💙"
             )
         else:
             support_message = (
-                "😟 Žao mi je što si ovo doživio/la. "
-                "Tvoj osjećaj je validan. "
-                "Blokiraj osobu i prijavi sadržaj. "
-                "Ako trebaš razgovor, tu sam. 💚"
+                "😟 I'm sorry you experienced this. "
+                "Your feeling is valid. "
+                "Block the person and report the content. "
+                "If you need to talk, I'm here. 💚"
             )
     elif analysis['decision'] == 'ADMIN_REVIEW':
         support_message = (
-            "🤔 Ovaj sadržaj je na granici. "
-            "Ako te uznemirava, prijavi ga. "
-            "Ne ignoriši svoj osjećaj. 💛"
+            "🤔 This content is on the borderline. "
+            "If it's bothering you, report it. "
+            "Don't ignore your feelings. 💛"
         )
     else:
         support_message = (
-            "✅ Ovaj tekst ne sadrži indikatore cyberbullying-a. "
-            "Ako si ipak zabrinut/a, podijeli više detalja. 😊"
+            "✅ This text shows no indicators of cyberbullying. "
+            "If you're still concerned, share more details. 😊"
         )
     
     resources = [
-        {"name": "📞 Linija za pomoć", "value": "0800-300-303"},
-        {"name": "🔗 Prijavi nasilje", "value": "https://www.netprijava.rs/"},
-        {"name": "📖 Vodič za sigurnost", "value": "https://www.unicef.org/serbia/"},
+        {"name": "📞 Helpline", "value": "0800-300-303"},
+        {"name": "🔗 Report Violence", "value": "https://www.netprijava.rs/"},
+        {"name": "📖 Safety Guide", "value": "https://www.unicef.org/serbia/"},
     ]
     
     safety_tips = [
-        "🔒 Blokiraj osobu koja te uznemirava",
-        "📸 Sačuvaj screenshot-ove kao dokaz",
-        "🚨 Prijavi sadržaj platformi",
-        "💬 Razgovaraj sa odraslom osobom",
-        "🧠 Ne krivi sebe - nasilje je izbor nasilnika",
+        "🔒 Block the person harassing you",
+        "📸 Take screenshots as evidence",
+        "🚨 Report the content to the platform",
+        "💬 Talk to a trusted adult",
+        "🧠 Don't blame yourself - bullying is the bully's choice",
     ]
     
     return {
@@ -289,18 +322,18 @@ async def generate_support(input: TextInput):
     }
 
 # =====================================================================
-# ENDPOINT: Sumarizacija
+# ENDPOINT: Summarization
 # =====================================================================
 @app.post("/api/summarize")
 async def summarize_text(input: TextInput):
-    # Jednostavna ekstraktivna sumarizacija
+    # Simple extractive summarization
     sentences = re.split(r'(?<=[.!?])\s+', input.text)
     sentences = [s for s in sentences if len(s) > 10]
     
     if len(sentences) <= 3:
         summary = input.text
     else:
-        # Uzmi prvu, srednju i posljednju rečenicu
+        # Take first, middle, and last sentence
         mid = len(sentences) // 2
         selected = [sentences[0], sentences[mid], sentences[-1]]
         summary = ' '.join(selected)
@@ -313,7 +346,7 @@ async def summarize_text(input: TextInput):
     }
 
 # =====================================================================
-# HEALTH CHECK
+# ENDPOINT: Health Check
 # =====================================================================
 @app.get("/api/health")
 async def health_check():
@@ -324,7 +357,77 @@ async def health_check():
     }
 
 # =====================================================================
-# POKRETANJE
+# ENDPOINT: Test Topic Model
+# =====================================================================
+@app.get("/api/test-topic")
+async def test_topic():
+    """Test endpoint for topic model verification"""
+    test_text = "You are so ugly and stupid"
+    
+    if 'topic_analyzer' in globals() and topic_analyzer.topic_model is not None:
+        result = topic_analyzer.analyze_text(test_text)
+        return {
+            "status": "loaded",
+            "test_result": result,
+            "model_path": topic_analyzer.model_path
+        }
+    else:
+        return {
+            "status": "not_loaded",
+            "error": "Topic model not loaded"
+        }
+
+# =====================================================================
+# FEEDBACK ENDPOINTS
+# =====================================================================
+
+@app.post("/api/admin-feedback")
+async def submit_admin_feedback(feedback: AdminFeedbackRequest):
+    """Store user feedback for ADMIN_REVIEW cases"""
+    
+    with open(FEEDBACK_FILE, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            datetime.now().isoformat(),
+            feedback.original_text,
+            feedback.model_decision,
+            feedback.model_score,
+            feedback.user_verdict,
+            feedback.topic_category or '',
+            str(feedback.model_predictions) if feedback.model_predictions else ''
+        ])
+    
+    print(f"📝 Admin feedback saved: {feedback.user_verdict} for: {feedback.original_text[:50]}...")
+    
+    # Count collected feedback
+    with open(FEEDBACK_FILE, 'r', encoding='utf-8') as f:
+        count = sum(1 for _ in f) - 1
+    
+    return {
+        "status": "success", 
+        "message": "Feedback saved",
+        "total_feedback": count,
+        "suggestion": "After 50-100 feedback entries, you can run fine-tuning"
+    }
+
+@app.get("/api/feedback-stats")
+async def get_feedback_stats():
+    """Return statistics about collected feedback"""
+    if not os.path.exists(FEEDBACK_FILE):
+        return {"total": 0, "bullying": 0, "safe": 0, "needs_finetune": False}
+    
+    import pandas as pd
+    df = pd.read_csv(FEEDBACK_FILE)
+    total = len(df)
+    return {
+        "total": total,
+        "bullying": len(df[df['user_verdict'] == 'BULLYING_DETECTED']),
+        "safe": len(df[df['user_verdict'] == 'SAFE']),
+        "needs_finetune": total >= 50
+    }
+
+# =====================================================================
+# RUN SERVER
 # =====================================================================
 if __name__ == "__main__":
     import uvicorn
