@@ -8,7 +8,7 @@ import numpy as np
 import os
 import csv
 from datetime import datetime
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 from topic_analyzer import TopicAnalyzer
 
 # =====================================================================
@@ -26,10 +26,28 @@ app.add_middleware(
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 MODELS_PATH = os.path.join(os.path.dirname(__file__), 'models')
+os.makedirs(MODELS_PATH, exist_ok=True)
+
+if not os.path.isdir(MODELS_PATH):
+    raise RuntimeError(
+        f"Missing backend models folder: {MODELS_PATH}.\n"
+        "Create the folder and place the downloaded model directories there."
+    )
+
 TOKENIZER = AutoTokenizer.from_pretrained('distilbert-base-uncased')
 
 print(f"⚡ Device: {DEVICE}")
 print(f"📂 Models path: {MODELS_PATH}")
+
+
+def local_model_path(model_name):
+    model_path = os.path.join(MODELS_PATH, model_name)
+    if not os.path.isdir(model_path):
+        raise FileNotFoundError(
+            f"Local model directory not found: {model_path}.\n"
+            "Download the model and place it under backend/models/."
+        )
+    return model_path
 
 # =====================================================================
 # LOAD MODELS
@@ -41,13 +59,13 @@ models = {}
 # Model 1: Jigsaw
 print("   Loading Model 1 (Jigsaw)...")
 models['jigsaw'] = AutoModelForSequenceClassification.from_pretrained(
-    os.path.join(MODELS_PATH, 'model_1_jigsaw'), local_files_only=True
+    local_model_path('model_1_jigsaw'), local_files_only=True
 ).to(DEVICE).eval()
 
 # Model 2: Cyberbullying Type
 print("   Loading Model 2 (Cyberbullying Type)...")
 models['cyberbullying'] = AutoModelForSequenceClassification.from_pretrained(
-    os.path.join(MODELS_PATH, 'model_2_cyberbullying'), local_files_only=True
+    local_model_path('model_2_cyberbullying'), local_files_only=True
 ).to(DEVICE).eval()
 mapping_2 = np.load(os.path.join(MODELS_PATH, 'model_2_mapping.npy'), allow_pickle=True).item()
 inv_mapping_2 = {v: k for k, v in mapping_2.items()}
@@ -55,19 +73,19 @@ inv_mapping_2 = {v: k for k, v in mapping_2.items()}
 # Model 3: Davidson Hate Speech
 print("   Loading Model 3 (Davidson)...")
 models['hate_speech'] = AutoModelForSequenceClassification.from_pretrained(
-    os.path.join(MODELS_PATH, 'model_3_davidson'), local_files_only=True
+    local_model_path('model_3_davidson'), local_files_only=True
 ).to(DEVICE).eval()
 
 # Model 4: Formspring
 print("   Loading Model 4 (Formspring)...")
 models['implicit'] = AutoModelForSequenceClassification.from_pretrained(
-    os.path.join(MODELS_PATH, 'model_4_formspring'), local_files_only=True
+    local_model_path('model_4_formspring'), local_files_only=True
 ).to(DEVICE).eval()
 
 # Model 5: OffensEval
 print("   Loading Model 5 (OffensEval)...")
 models['target'] = AutoModelForSequenceClassification.from_pretrained(
-    os.path.join(MODELS_PATH, 'model_5_offenseval'), local_files_only=True
+    local_model_path('model_5_offenseval'), local_files_only=True
 ).to(DEVICE).eval()
 mapping_5 = np.load(os.path.join(MODELS_PATH, 'model_5_mapping.npy'), allow_pickle=True).item()
 inv_mapping_5 = {v: k for k, v in mapping_5.items()}
@@ -75,7 +93,7 @@ inv_mapping_5 = {v: k for k, v in mapping_5.items()}
 # Model GoEmotions 
 print("   Loading Model 6 (GoEmotions)...")
 models['goemotions'] = AutoModelForSequenceClassification.from_pretrained(
-    os.path.join(MODELS_PATH, 'model_goemotions'), local_files_only=True
+    local_model_path('model_goemotions'), local_files_only=True
 ).to(DEVICE).eval()
 
 # Lista svih 28 emocija tačno onim redoslijedom kako ih GoEmotions dataset ima registrirane
@@ -90,6 +108,22 @@ GO_EMOTIONS_LABELS = [
 # Model Topic Analyzer
 print("\n📥 Loading Topic Analyzer...")
 topic_analyzer = TopicAnalyzer("./models/topic_model")
+
+# Model 7: NER
+print("   Loading NER model...")
+NER_MODEL_NAME = "Davlan/bert-base-multilingual-cased-ner-hrl"
+NER_DEVICE = 0 if torch.cuda.is_available() else -1
+try:
+    ner_pipeline = pipeline(
+        "ner",
+        model=NER_MODEL_NAME,
+        aggregation_strategy="simple",
+        device=NER_DEVICE
+    )
+    print(f"NER model loaded: {NER_MODEL_NAME} on device {NER_DEVICE}")
+except Exception as e:
+    ner_pipeline = None
+    print(f"Failed to load NER model: {e}")
 
 print("✅ All models loaded successfully!")
 
@@ -297,21 +331,37 @@ async def analyze_sentiment(input: TextInput):
 # =====================================================================
 @app.post("/api/ner")
 async def extract_entities(input: TextInput):
+    if not input.text or ner_pipeline is None:
+        return {'entities': {'PER': [], 'LOC': [], 'ORG': [], 'MISC': []}, 'total': 0}
+
     try:
-        import spacy
-        nlp = spacy.load("en_core_web_sm")
-        doc = nlp(input.text)
-        
+        ner_output = ner_pipeline(input.text)
         entities = {'PER': [], 'LOC': [], 'ORG': [], 'MISC': []}
-        for ent in doc.ents:
-            if ent.label_ in entities:
-                entities[ent.label_].append({'text': ent.text, 'label': ent.label_})
-            elif ent.label_ == 'GPE':
-                entities['LOC'].append({'text': ent.text, 'label': 'GPE'})
-        
+
+        for ent in ner_output:
+            label = ent.get('entity_group') or ent.get('entity')
+            text = ent.get('word') or ent.get('entity')
+
+            if label in ['PER', 'PERSON']:
+                group = 'PER'
+            elif label in ['LOC', 'GPE', 'LOCATION']:
+                group = 'LOC'
+            elif label in ['ORG', 'ORGANIZATION']:
+                group = 'ORG'
+            else:
+                group = 'MISC'
+
+            entities[group].append({
+                'text': text,
+                'label': label,
+                'score': round(float(ent.get('score', 0.0)), 4),
+                'start': ent.get('start'),
+                'end': ent.get('end')
+            })
+
         return {'entities': entities, 'total': sum(len(v) for v in entities.values())}
-    except:
-        return {'entities': {'PER': [], 'LOC': [], 'ORG': [], 'MISC': []}, 'total': 0, 'error': 'spaCy not installed'}
+    except Exception as e:
+        return {'entities': {'PER': [], 'LOC': [], 'ORG': [], 'MISC': []}, 'total': 0, 'error': str(e)}
 
 # =====================================================================
 # ENDPOINT: Chatbot Support
