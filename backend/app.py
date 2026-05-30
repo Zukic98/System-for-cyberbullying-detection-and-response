@@ -10,6 +10,7 @@ import csv
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 from topic_analyzer import TopicAnalyzer
+from incident_sumarizator import IncidentSumarizator
 
 # =====================================================================
 # INITIALIZATION
@@ -124,6 +125,14 @@ try:
 except Exception as e:
     ner_pipeline = None
     print(f"Failed to load NER model: {e}")
+
+# Initialize abstractive summarizer (optional; may download model)
+try:
+    summarizer = IncidentSumarizator()
+    print("Summarizer loaded: facebook/bart-large-cnn")
+except Exception as e:
+    summarizer = None
+    print(f"Summarizer not available: {e}")
 
 print("✅ All models loaded successfully!")
 
@@ -427,23 +436,35 @@ async def generate_support(input: TextInput):
 # =====================================================================
 @app.post("/api/summarize")
 async def summarize_text(input: TextInput):
-    # Simple extractive summarization
+    # Prefer abstractive summarizer when available
+    if 'summarizer' in globals() and summarizer is not None:
+        try:
+            summary = summarizer.generisi_izvjestaj(input.text)
+            return {
+                'original_length': len(input.text),
+                'summary_length': len(summary),
+                'summary': summary,
+                'method': 'abstractive'
+            }
+        except Exception as e:
+            print(f"Summarizer error: {e}")
+
+    # Fallback: simple extractive summarization
     sentences = re.split(r'(?<=[.!?])\s+', input.text)
     sentences = [s for s in sentences if len(s) > 10]
-    
+
     if len(sentences) <= 3:
         summary = input.text
     else:
-        # Take first, middle, and last sentence
         mid = len(sentences) // 2
         selected = [sentences[0], sentences[mid], sentences[-1]]
         summary = ' '.join(selected)
-    
+
     return {
         'original_length': len(input.text),
         'summary_length': len(summary),
         'summary': summary,
-        'compression_ratio': round(len(summary) / max(len(input.text), 1) * 100, 1)
+        'method': 'extractive'
     }
 
 # =====================================================================
