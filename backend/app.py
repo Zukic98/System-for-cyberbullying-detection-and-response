@@ -72,6 +72,21 @@ models['target'] = AutoModelForSequenceClassification.from_pretrained(
 mapping_5 = np.load(os.path.join(MODELS_PATH, 'model_5_mapping.npy'), allow_pickle=True).item()
 inv_mapping_5 = {v: k for k, v in mapping_5.items()}
 
+# Model GoEmotions 
+print("   Loading Model 6 (GoEmotions)...")
+models['goemotions'] = AutoModelForSequenceClassification.from_pretrained(
+    os.path.join(MODELS_PATH, 'model_goemotions'), local_files_only=True
+).to(DEVICE).eval()
+
+# Lista svih 28 emocija tačno onim redoslijedom kako ih GoEmotions dataset ima registrirane
+GO_EMOTIONS_LABELS = [
+    "admiration", "amusement", "anger", "annoyance", "approval", "caring", 
+    "confusion", "curiosity", "desire", "disappointment", "disapproval", 
+    "disgust", "embarrassment", "excitement", "fear", "gratitude", "grief", 
+    "joy", "love", "nervousness", "optimism", "outrage", "sadness", 
+    "surprise", "neutral"
+] 
+
 # Model Topic Analyzer
 print("\n📥 Loading Topic Analyzer...")
 topic_analyzer = TopicAnalyzer("./models/topic_model")
@@ -217,28 +232,64 @@ async def analyze_text(input: TextInput):
         'cleaned_text': clean
     }
 
+
 # =====================================================================
-# ENDPOINT: Sentiment
+# ENDPOINT: Sentiment / GoEmotions 
 # =====================================================================
 @app.post("/api/sentiment")
 async def analyze_sentiment(input: TextInput):
     try:
-        from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-        vader = SentimentIntensityAnalyzer()
-        scores = vader.polarity_scores(input.text)
+        clean = clean_text(input.text)
+        tokens = tokenize(clean)
         
+        with torch.no_grad():
+            logits = models['goemotions'](**tokens).logits
+            probs = torch.sigmoid(logits).cpu().numpy()[0]
+            
+        emotions_result = {l: round(float(probs[i]), 4) for i, l in enumerate(GO_EMOTIONS_LABELS) if i < len(probs)}
+        
+        top_emotion = max(emotions_result, key=emotions_result.get)
+        top_score = emotions_result[top_emotion]
+        
+      
+        negative_emotions = ["anger", "annoyance", "disappointment", "disapproval", "disgust", "fear", "grief", "nervousness", "outrage", "sadness"]
+        positive_emotions = ["admiration", "amusement", "approval", "caring", "desire", "excitement", "gratitude", "joy", "love", "optimism"]
+        
+        pos_score = sum(emotions_result.get(e, 0.0) for e in positive_emotions)
+        neg_score = sum(emotions_result.get(e, 0.0) for e in negative_emotions)
+        neu_score = emotions_result.get("neutral", 0.0) + emotions_result.get("confusion", 0.0) + emotions_result.get("curiosity", 0.0) + emotions_result.get("surprise", 0.0)
+        
+        total_score = pos_score + neg_score + neu_score
+        if total_score > 0:
+            pos_pct = round(pos_score / total_score, 4)
+            neg_pct = round(neg_score / total_score, 4)
+            neu_pct = round(neu_score / total_score, 4)
+        else:
+            pos_pct, neg_pct, neu_pct = 0.0, 0.0, 1.0
+
+        if top_emotion in negative_emotions:
+            sentiment_category = 'negative'
+        elif top_emotion in positive_emotions:
+            sentiment_category = 'positive'
+        else:
+            sentiment_category = 'neutral'
+            
         return {
-            'compound': scores['compound'],
-            'sentiment': 'positive' if scores['compound'] > 0.05 else ('negative' if scores['compound'] < -0.05 else 'neutral'),
-            'positive': scores['pos'],
-            'negative': scores['neg'],
-            'neutral': scores['neu'],
+            'compound': float(top_score) if sentiment_category == 'positive' else -float(top_score) if sentiment_category == 'negative' else 0,
+            'sentiment': sentiment_category,
+            'top_emotion': top_emotion,
+            'confidence': float(top_score),
+            'all_emotions': emotions_result,
+            
+            'positive': pos_pct,
+            'negative': neg_pct,
+            'neutral': neu_pct
         }
-    except ImportError:
+        
+    except Exception as e:
         return {
-            'compound': 0, 'sentiment': 'neutral',
-            'positive': 0, 'negative': 0, 'neutral': 1,
-            'error': 'vaderSentiment not installed'
+            'compound': 0, 'sentiment': 'neutral', 'top_emotion': 'neutral', 'confidence': 0,
+            'error': str(e)
         }
 
 # =====================================================================

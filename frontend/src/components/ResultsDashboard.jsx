@@ -143,7 +143,16 @@ const ResultsDashboard = ({ result, sentimentResult, decisionInfo, topicAnalysis
       {/* Sentiment Preview */}
       {sentimentResult && (
         <div className="card p-5">
-          <h3 className="font-semibold text-gray-800 mb-3">😊 Sentiment Analysis</h3>
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <h3 className="font-semibold text-gray-800">😊 Sentiment Analysis</h3>
+            
+            {sentimentResult.top_emotion && (
+              <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full border border-indigo-100 uppercase tracking-wider">
+                Detected: {sentimentResult.top_emotion}
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="bg-green-50 rounded-xl p-3">
               <div className="text-green-600 font-bold">{(sentimentResult.positive * 100).toFixed(0)}%</div>
