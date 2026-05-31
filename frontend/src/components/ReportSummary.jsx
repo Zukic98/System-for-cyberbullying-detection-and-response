@@ -21,7 +21,7 @@ const ReportSummary = ({ result, summaryResult, sentimentResult, nerResult }) =>
           </div>
           <div>
             <span className="text-slate-400">Compression:</span>
-            <span className="ml-2 text-white">{summaryResult.compression_ratio}%</span>
+            <span className="ml-2 text-white">{((1 - summaryResult.summary_length / summaryResult.original_length) * 100).toFixed(1)}%</span>
           </div>
         </div>
       </div>
