@@ -198,7 +198,15 @@ const FloatingChat = ({ initialText, emotion, topic }) => {
                           : 'bg-white text-gray-800 rounded-bl-none shadow-sm'
                       }`}
                     >
-                      <p className="text-sm">{msg.text}</p>
+                      <p
+                        className="text-sm whitespace-pre-line"
+                        dangerouslySetInnerHTML={{
+                          __html: msg.text
+                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                            .replace(/\n/g, '<br/>')
+                        }}
+                      />
                       <span className={`text-[10px] mt-1 block ${
                         msg.role === 'user' ? 'text-purple-200' : 'text-gray-400'
                       }`}>

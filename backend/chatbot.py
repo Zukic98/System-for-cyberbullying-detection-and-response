@@ -3,7 +3,7 @@ import re
 
 
 # =========================================================
-# RESPONSE TEMPLATES (odvojene od logike, lako proširiti)
+# RESPONSE TEMPLATES
 # =========================================================
 
 TOPIC_DESCRIPTIONS = {
@@ -59,23 +59,16 @@ EMOTION_FIRST_MESSAGES = {
 }
 
 SEVERITY_OPENINGS = {
-    "high":   "🚨 I can see this is a serious situation you're dealing with. Thank you for having the courage to reach out — that's a big first step.",
-    "medium": "💙 I understand you're going through something difficult. Thank you for trusting me enough to talk about it.",
-    "low":    "💙 I'm here to support you. Thank you for reaching out.",
+    "high":   "🚨 I can see this is a serious situation you're dealing with. Thank you for having the courage to reach out — that's a big first step. ",
+    "medium": "💙 I understand you're going through something difficult. Thank you for trusting me enough to talk about it. ",
+    "low":    "💙 I'm here to support you. Thank you for reaching out. ",
 }
 
 GOODBYE_RESPONSES = {
-    "fear":        "I hope you feel a little less alone after our chat. 💙 Remember: you're braver than you believe, and stronger than you feel right now. Please reach out to someone in real life too — you deserve support. Take care of yourself. 🤝",
-    "sadness":     "I'm glad you reached out today. 🧡 You've taken a step — that takes real courage. You matter more than you know. Please be gentle with yourself. 💙",
-    "anger":       "Goodbye for now. 💪 Remember that your anger is valid, but don't let it consume you. Channel it into action that protects you. You deserve peace and safety. 🤝",
-    "default":     "Thank you for trusting me today. 💙 Remember: you're not alone, you matter, and this situation doesn't define your worth. Take care of yourself — you deserve it. 🤝💙",
-}
-
-ENGAGEMENT_RESPONSES = {
-    "fear":        "I know this is really hard to talk about. 💙 What's one small thing that would make you feel even a little better right now? A plan? A distraction? Just someone to listen? 🤝",
-    "sadness":     "You don't have to say much. 🧡 Even just telling me how you're feeling — tired, angry, numb — that's enough. I'm listening without judgment. What's on your heart right now?",
-    "anger":       "Your feelings matter so much. 💪 Would you like to talk more about what happened, or would practical strategies be more helpful right now? 🚨",
-    "default":     "Take your time. 💙 What would help most right now — advice, resources, or just someone to listen? You don't have to go through this alone. 🤝",
+    "fear":    "I hope you feel a little less alone after our chat. 💙 Remember: you're braver than you believe, and stronger than you feel right now. Please reach out to someone in real life too — you deserve support. Take care of yourself. 🤝",
+    "sadness": "I'm glad you reached out today. 🧡 You've taken a step — that takes real courage. You matter more than you know. Please be gentle with yourself. 💙",
+    "anger":   "Goodbye for now. 💪 Remember that your anger is valid, but don't let it consume you. Channel it into action that protects you. You deserve peace and safety. 🤝",
+    "default": "Thank you for trusting me today. 💙 Remember: you're not alone, you matter, and this situation doesn't define your worth. Take care of yourself — you deserve it. 🤝💙",
 }
 
 CRISIS_PHRASES = [
@@ -84,6 +77,7 @@ CRISIS_PHRASES = [
     "nothing matters", "what's the point", "don't want to live",
 ]
 
+# Valid stage transitions
 STAGE_TRANSITIONS = {
     "initial":          ["venting", "ready_for_advice"],
     "venting":          ["venting", "ready_for_advice"],
@@ -104,20 +98,19 @@ class ChatSession:
     def create_session(self, analysis_result):
         session_id = str(uuid.uuid4())
         self.sessions[session_id] = {
-            "history":          [],
-            "analysis":         analysis_result,
+            "history":           [],
+            "analysis":          analysis_result,
             "last_bot_response": None,
-            "user_name":        None,
-            "user_concern":     None,
-            "advice_given":     False,
-            "action_taken":     False,
-            "emotion_detected": analysis_result.get("emotion", "unknown"),
-            "topic_detected":   analysis_result.get("topic", "general"),
+            "user_name":         None,
+            "user_concern":      None,
+            "advice_given":      False,
+            "action_taken":      False,
+            "emotion_detected":  analysis_result.get("emotion", "unknown"),
+            "topic_detected":    analysis_result.get("topic", "general"),
             "entities_detected": [],
-            # Novo: stage praćenje i skup tema koje su se pojavile
-            "stage":            "initial",
-            "mentioned_topics": set(),
-            "recent_responses": [],   # zadnjih 5 bot odgovora (hash prvih 60 znakova)
+            "stage":             "initial",
+            "mentioned_topics":  set(),
+            "recent_responses":  [],   # last 5 bot response fingerprints
         }
         return session_id
 
@@ -127,12 +120,11 @@ class ChatSession:
             return
         s["history"].append({"user": user_message, "bot": bot_message})
         s["last_bot_response"] = bot_message
-        # Čuvaj hash zadnjih 5 odgovora za deduplikaciju
+        # Track last 5 responses for deduplication
         key = bot_message[:60]
         s["recent_responses"].append(key)
         if len(s["recent_responses"]) > 5:
             s["recent_responses"].pop(0)
-        # Ažuriraj mentioned_topics iz korisnikove poruke
         self._update_mentioned_topics(session_id, user_message)
 
     def _update_mentioned_topics(self, session_id, text):
@@ -165,8 +157,17 @@ class ChatSession:
         return self.sessions.get(session_id, {}).get("stage", "initial")
 
     def set_stage(self, session_id, stage):
+        """Only transition to valid next stages."""
         s = self.sessions.get(session_id)
-        if s and stage in STAGE_TRANSITIONS:
+        if not s:
+            return
+        current = s.get("stage", "initial")
+        allowed = STAGE_TRANSITIONS.get(current, [])
+        if stage in allowed:
+            s["stage"] = stage
+        # If the transition isn't in the map but the target is a known stage,
+        # allow it anyway (e.g. jumping from initial straight to action_planning)
+        elif stage in STAGE_TRANSITIONS:
             s["stage"] = stage
 
     def set_user_name(self, session_id, name):
@@ -190,6 +191,9 @@ class ChatSession:
             s["entities_detected"] = entities
 
     def is_repeat_response(self, session_id, response):
+        """FIX: handle None session_id gracefully."""
+        if session_id is None:
+            return False
         s = self.sessions.get(session_id)
         if not s:
             return False
@@ -200,14 +204,14 @@ class ChatSession:
         if not s:
             return None
         return {
-            "user_name":       s.get("user_name"),
-            "user_concern":    s.get("user_concern"),
-            "advice_given":    s.get("advice_given"),
-            "message_count":   len(s["history"]) * 2,
-            "emotion":         s.get("emotion_detected"),
-            "topic":           s.get("topic_detected"),
-            "entities":        s.get("entities_detected"),
-            "stage":           s.get("stage"),
+            "user_name":        s.get("user_name"),
+            "user_concern":     s.get("user_concern"),
+            "advice_given":     s.get("advice_given"),
+            "message_count":    len(s["history"]) * 2,
+            "emotion":          s.get("emotion_detected"),
+            "topic":            s.get("topic_detected"),
+            "entities":         s.get("entities_detected"),
+            "stage":            s.get("stage"),
             "mentioned_topics": s.get("mentioned_topics", set()),
         }
 
@@ -236,11 +240,18 @@ class LLMChatbot:
 
         topic_msg     = TOPIC_DESCRIPTIONS.get(topic_category.lower(), TOPIC_DESCRIPTIONS["general"])
         topic_msg_cap = topic_msg.capitalize()
-        severity_key  = "high" if (score > 0.7 or topic_severity >= 4) else ("medium" if (score > 0.3 or topic_severity >= 3) else "low")
-        severity      = SEVERITY_OPENINGS[severity_key]
+        severity_key  = (
+            "high"   if (score > 0.7 or topic_severity >= 4) else
+            "medium" if (score > 0.3 or topic_severity >= 3) else
+            "low"
+        )
+        severity = SEVERITY_OPENINGS[severity_key]
 
         person_entities = self._extract_persons(entities)
-        entity_str = f" {self._context_string(person_entities, [], [], topic_keywords)}" if person_entities else ""
+        entity_str = (
+            f" {self._context_string(person_entities, [], [], topic_keywords)}"
+            if person_entities else ""
+        )
 
         template = EMOTION_FIRST_MESSAGES.get(emotion, EMOTION_FIRST_MESSAGES["default"])
         return template.format(
@@ -251,39 +262,36 @@ class LLMChatbot:
         )
 
     def generate_response(self, user_message, history, analysis, session_id):
-        # Izvuci sve kontekstualne informacije
         emotion        = analysis.get("emotion", "unknown")
         score          = analysis.get("score", 0)
         topic_severity = analysis.get("topic_severity", 2)
         entities       = analysis.get("entities", {})
 
-        user_lower     = user_message.lower().strip()
-        word_count     = len(user_message.split())
-        last_bot       = self.sessions.get_last_bot_response(session_id) or ""
-        session_info   = self.sessions.get_session_summary(session_id) or {}
-        stage          = session_info.get("stage", "initial")
-        mentioned      = session_info.get("mentioned_topics", set())
-        msg_count      = session_info.get("message_count", 0)
+        user_lower   = user_message.lower().strip()
+        word_count   = len(user_message.split())
+        last_bot     = self.sessions.get_last_bot_response(session_id) or ""
+        session_info = self.sessions.get_session_summary(session_id) or {}
+        stage        = session_info.get("stage", "initial")
+        mentioned    = session_info.get("mentioned_topics", set())
+        msg_count    = session_info.get("message_count", 0)
 
-        # Efektivni topic = topic iz analize + sve što je korisnik dosad spomenuo
-        base_topic     = analysis.get("topic_category", analysis.get("topic", "general")).lower()
+        base_topic      = analysis.get("topic_category", analysis.get("topic", "general")).lower()
         effective_topic = self._resolve_effective_topic(base_topic, mentioned, user_lower)
-
         person_entities = self._extract_persons(entities)
 
         # =====================================================
-        # 1. CRISIS (uvijek prvo)
+        # 1. CRISIS (always first)
         # =====================================================
         if any(phrase in user_lower for phrase in CRISIS_PHRASES):
             return self._crisis_response()
 
         # =====================================================
-        # 2. TOPIC DETEKCIJA (odmah iza crisis — ne na dnu!)
+        # 2. TOPIC DETECTION from current message
         # =====================================================
         detected_topic = self._detect_topic_from_message(user_lower, effective_topic)
 
         # =====================================================
-        # 3. IME / POZDRAV
+        # 3. NAME / GREETING
         # =====================================================
         name_match = re.search(
             r"(?:my name is|i'm|i am|call me|name'?s)\s+([a-zA-Z]+)", user_lower
@@ -297,14 +305,16 @@ class LLMChatbot:
             )
 
         # =====================================================
-        # 4. DJELJENJE ISKUSTVA (kad je bot postavio pitanje)
+        # 4. EXPERIENCE SHARING (when bot asked a question)
         # =====================================================
         sharing_triggers = [
             "Would you like to share", "What happened", "tell me what happened",
             "share what happened", "tell me more", "what's been happening",
             "talk about what's been going on",
         ]
-        is_yes_no = user_lower in {"yes", "yeah", "yep", "sure", "ok", "okay", "no", "nope", "nah", "yup", "nop", "yea"}
+        is_yes_no = user_lower in {
+            "yes", "yeah", "yep", "sure", "ok", "okay", "no", "nope", "nah", "yup", "nop", "yea"
+        }
         if word_count > 3 and not is_yes_no and any(t in last_bot for t in sharing_triggers):
             self.sessions.set_user_concern(session_id, user_message[:200])
             self.sessions.set_stage(session_id, "venting")
@@ -313,34 +323,41 @@ class LLMChatbot:
             )
 
         # =====================================================
-        # 5. SPECIFIČNE AKCIJE
+        # 5. SPECIFIC ACTIONS
         # =====================================================
-        if any(p in user_lower for p in [
-                "talk to someone", "tell someone", "talk to a teacher",
-                "talk to a parent", "talk to a counselor", "talk to hr",
-                "tell a teacher", "tell my parents",
-                "what do i say", "what should i say",  # ← dodaj ovo
-                "how do i tell", "how do i talk"        # ← i ovo
-            ]):
+        talking_triggers = [
+            "talk to someone", "tell someone", "talk to a teacher",
+            "talk to a parent", "talk to a counselor", "talk to hr",
+            "tell a teacher", "tell my parents",
+            "what do i say", "what should i say",
+            "how do i tell", "how do i talk",
+        ]
+        if any(p in user_lower for p in talking_triggers):
             return self._talking_response(detected_topic, person_entities, user_lower)
 
-        if any(p in user_lower for p in ["evidence", "screenshot", "document", "save proof",
-                                          "collect evidence", "take screenshot"]):
+        if any(p in user_lower for p in [
+            "evidence", "screenshot", "document", "save proof",
+            "collect evidence", "take screenshot",
+        ]):
             return self._evidence_response()
 
-        if any(p in user_lower for p in ["report", "file a report", "report to platform",
-                                          "how to report", "report them", "report the content"]):
+        if any(p in user_lower for p in [
+            "report", "file a report", "report to platform",
+            "how to report", "report them", "report the content",
+        ]):
             return self._reporting_response(detected_topic, user_lower)
 
         if any(p in user_lower for p in ["block", "block them", "how to block"]):
             return self._blocking_response(user_lower)
 
-        if any(p in user_lower for p in ["privacy", "private account", "make my account private",
-                                          "who can see", "privacy settings"]):
+        if any(p in user_lower for p in [
+            "privacy", "private account", "make my account private",
+            "who can see", "privacy settings",
+        ]):
             return self._privacy_response()
 
         # =====================================================
-        # 6. ZAHTJEV ZA SAVJETOM
+        # 6. ADVICE REQUEST
         # =====================================================
         advice_triggers = [
             "what do i do", "what should i do", "help me", "advice", "how do i",
@@ -354,23 +371,29 @@ class LLMChatbot:
             return self._advice_response(detected_topic, emotion, user_lower, score, topic_severity)
 
         # =====================================================
-        # 7. TOPIC-SPECIFIČNI ODGOVORI
+        # 7. TOPIC-SPECIFIC RESPONSES
         # =====================================================
         if detected_topic == "work":
+            self.sessions.set_stage(session_id, "venting")
             return self._work_response(user_lower, emotion, person_entities)
         if detected_topic == "school":
+            self.sessions.set_stage(session_id, "venting")
             return self._school_response(user_lower, emotion, person_entities)
         if detected_topic == "online":
+            self.sessions.set_stage(session_id, "venting")
             return self._online_response(user_lower, emotion)
         if detected_topic == "appearance":
+            self.sessions.set_stage(session_id, "venting")
             return self._appearance_response(emotion)
         if detected_topic == "threats":
+            self.sessions.set_stage(session_id, "ready_for_advice")
             return self._threats_response(score, topic_severity)
         if detected_topic == "isolation":
+            self.sessions.set_stage(session_id, "venting")
             return self._isolation_response(emotion)
 
         # =====================================================
-        # 8. YES / NO (kontekst-svjesno)
+        # 8. YES / NO (context-aware)
         # =====================================================
         if user_lower in {"yes", "yeah", "yep", "sure", "ok", "okay", "yup", "yea"}:
             return self._yes_response(last_bot, session_info, emotion, detected_topic, stage)
@@ -379,34 +402,38 @@ class LLMChatbot:
             return self._no_response(last_bot, stage)
 
         # =====================================================
-        # 9. ZAHVALNOST / POZDRAV
+        # 9. GRATITUDE / GOODBYE
         # =====================================================
-        if any(w in user_lower for w in ["thank", "thanks", "appreciate", "helpful", "you're great", "awesome"]):
+        if any(w in user_lower for w in [
+            "thank", "thanks", "appreciate", "helpful", "you're great", "awesome",
+        ]):
             return self._thank_you_response(msg_count, emotion)
 
-        if any(p in user_lower for p in ["goodbye", "bye", "that's all", "end chat",
-                                          "good bye", "bye bye", "see you", "thanks bye"]):
+        if any(p in user_lower for p in [
+            "goodbye", "bye", "that's all", "end chat",
+            "good bye", "bye bye", "see you", "thanks bye",
+        ]):
             self.sessions.set_stage(session_id, "closing")
             return self._goodbye_response(emotion, session_info)
 
         # =====================================================
-        # 10. KRATKE PORUKE (zadržaj konverzaciju)
+        # 10. SHORT MESSAGES (keep conversation going)
         # =====================================================
         if word_count < 4 and msg_count >= 2:
             return self._engagement_response(emotion, detected_topic, session_info)
 
         # =====================================================
-        # 11. FALLBACK (koristi historiju i stage)
+        # 11. FALLBACK (stage + history aware)
         # =====================================================
         return self._fallback_response(
-            emotion, last_bot, session_info, detected_topic, score, topic_severity, stage
+            emotion, last_bot, session_info, detected_topic, score, topic_severity, stage, session_id
         )
 
     def get_session_summary(self, session_id):
         return self.sessions.get_session_summary(session_id)
 
     # ----------------------------------------------------------
-    # INTERNE POMOĆNE METODE
+    # INTERNAL HELPERS
     # ----------------------------------------------------------
 
     def _extract_persons(self, entities):
@@ -428,41 +455,53 @@ class LLMChatbot:
         return ". ".join(parts) + "." if parts else ""
 
     def _resolve_effective_topic(self, base_topic, mentioned_topics, user_lower):
-        """Kombinira base topic s temama koje su se pojavile u razgovoru."""
-        priority_order = ["threats", "work", "school", "online", "appearance", "isolation",
-                          "identity_hate", "gender", "religion", "age", "general"]
-        # Spoji sve poznate teme
+        """Combine base topic with topics mentioned across the conversation."""
+        priority_order = [
+            "threats", "work", "school", "online", "appearance", "isolation",
+            "identity_hate", "gender", "religion", "age", "general",
+        ]
         all_topics = {base_topic} | mentioned_topics
-        # Vrati prvu po prioritetu
         for t in priority_order:
             if t in all_topics:
                 return t
         return base_topic
 
     def _detect_topic_from_message(self, user_lower, fallback_topic):
-        """Detektuje topic direktno iz teksta poruke (premješteno na vrh)."""
+        """Detect topic directly from message text."""
         if any(w in user_lower for w in ["threat", "kill me", "hurt me", "beat me", "scared they"]):
             return "threats"
-        if any(w in user_lower for w in ["work", "job", "boss", "coworker", "manager", "hr", "office", "colleague"]):
+        if any(w in user_lower for w in [
+            "work", "job", "boss", "coworker", "manager", "hr", "office", "colleague",
+        ]):
             return "work"
-        if any(w in user_lower for w in ["school", "teacher", "class", "student", "counselor", "principal", "professor", "classmate"]):
+        if any(w in user_lower for w in [
+            "school", "teacher", "class", "student", "counselor", "principal",
+            "professor", "classmate",
+        ]):
             return "school"
-        if any(w in user_lower for w in ["online", "instagram", "facebook", "tiktok", "twitter", "snapchat", "discord", "reddit", "youtube"]):
+        if any(w in user_lower for w in [
+            "online", "instagram", "facebook", "tiktok", "twitter",
+            "snapchat", "discord", "reddit", "youtube",
+        ]):
             return "online"
-        if any(w in user_lower for w in ["fat", "ugly", "look", "appearance", "body", "weight", "skin", "face", "hair"]):
+        if any(w in user_lower for w in [
+            "fat", "ugly", "look", "appearance", "body", "weight", "skin", "face", "hair",
+        ]):
             return "appearance"
-        if any(w in user_lower for w in ["alone", "lonely", "nobody likes", "no friends", "isolated", "left out", "rejected"]):
+        if any(w in user_lower for w in [
+            "alone", "lonely", "nobody likes", "no friends", "isolated", "left out", "rejected",
+        ]):
             return "isolation"
         return fallback_topic
 
-    def _safe_response(self, session_id, response, fallback):
-        """Vrati fallback ako je response duplikat."""
-        if self.sessions.is_repeat_response(session_id, response):
+    def _unique_response(self, session_id, primary, fallback):
+        """Return primary unless it's a duplicate of a recent response, then return fallback."""
+        if self.sessions.is_repeat_response(session_id, primary):
             return fallback
-        return response
+        return primary
 
     # ----------------------------------------------------------
-    # RESPONSE METODE
+    # RESPONSE METHODS
     # ----------------------------------------------------------
 
     def _crisis_response(self):
@@ -488,12 +527,11 @@ class LLMChatbot:
             )
 
         emotion_reactions = {
-            "fear":         f"I'm really sorry that happened to you{person_str}. 💙 It's completely normal to feel scared. Would you like to talk about what might help you feel safer right now? 🤝",
-            "anger":        f"Thank you for sharing that{person_str}. 💪 Your anger makes complete sense. Would you like to talk about what you can do next? I'm here to help you figure out a plan. 💙",
-            "sadness":      f"I hear how much this hurt you{person_str}. 🧡 You didn't deserve any of that. Would you like to talk about how to move forward, or would you prefer some comfort right now? 💙",
-            "embarrassed":  f"Please don't feel embarrassed{person_str}. 💙 What happened is not your fault — not even a little bit. Would you like to talk more and work through those feelings? 🤝",
+            "fear":        f"I'm really sorry that happened to you{person_str}. 💙 It's completely normal to feel scared. Would you like to talk about what might help you feel safer right now? 🤝",
+            "anger":       f"Thank you for sharing that{person_str}. 💪 Your anger makes complete sense. Would you like to talk about what you can do next? I'm here to help you figure out a plan. 💙",
+            "sadness":     f"I hear how much this hurt you{person_str}. 🧡 You didn't deserve any of that. Would you like to talk about how to move forward, or would you prefer some comfort right now? 💙",
+            "embarrassed": f"Please don't feel embarrassed{person_str}. 💙 What happened is not your fault — not even a little bit. Would you like to talk more and work through those feelings? 🤝",
         }
-
         for key, resp in emotion_reactions.items():
             if key in user_lower or key == emotion:
                 return resp
@@ -835,6 +873,7 @@ class LLMChatbot:
         )
 
     def _yes_response(self, last_bot, session_info, emotion, topic, stage):
+        # Check what the bot last offered
         if "practice" in last_bot or "what to say" in last_bot:
             return (
                 "🎯 **Great! Let's practice:**\n\n"
@@ -858,7 +897,8 @@ class LLMChatbot:
                 "**🚨 Reporting:** Look for the 'Report' button on the platform and be specific about what happened.\n\n"
                 "Would you like to focus on any specific step? 💙"
             )
-        # Stage-svjesni yes odgovor
+
+        # Stage-aware yes response
         if stage in ("initial", "venting"):
             return (
                 "I'm glad you're ready to open up. 💙 Take your time — you can start with whatever feels easiest. "
@@ -933,9 +973,11 @@ class LLMChatbot:
         return GOODBYE_RESPONSES.get(emotion, GOODBYE_RESPONSES["default"])
 
     def _engagement_response(self, emotion, topic, session_info):
+        """Context-aware nudge to keep the conversation moving."""
         if session_info and session_info.get("advice_given"):
+            topic_label = topic or "what we've discussed"
             return (
-                f"How are you feeling about everything we've discussed regarding **{topic}**? "
+                f"How are you feeling about everything we've talked about regarding **{topic_label}**? "
                 "Is there anything specific you'd like more help with? I'm here for whatever you need. 💙"
             )
         if session_info and session_info.get("user_name"):
@@ -946,19 +988,41 @@ class LLMChatbot:
                 "What's one small thing that would make you feel even a little better right now? "
                 "A plan? A distraction? Just someone to listen? You're in control here. 🤝"
             )
-        return ENGAGEMENT_RESPONSES.get(emotion, ENGAGEMENT_RESPONSES["default"])
+        # Topic-aware fallback (FIX: was using generic template regardless of topic)
+        topic_nudges = {
+            "work":       "Are you still thinking about the work situation? I'm here whenever you're ready. 💙",
+            "school":     "It's okay to take your time. Is there anything about the school situation you'd like to talk through? 🤝",
+            "online":     "No rush at all. Would it help to start with something small, like what platform this is happening on? 💙",
+            "threats":    "Your safety matters most right now. Is there anything you'd like to do first — even just taking a screenshot? 🚨",
+            "isolation":  "Feeling alone is really hard. Is there one person in your life — even someone you haven't talked to in a while — who you trust? 💙",
+            "appearance": "You don't have to respond to hurtful comments. How are you feeling right now? 💙",
+        }
+        if topic in topic_nudges:
+            return topic_nudges[topic]
+        # Emotion-based final fallback
+        emotion_nudges = {
+            "fear":    "It's okay to be scared. 💙 What's one small thing that would make you feel even a little safer right now?",
+            "sadness": "You don't have to say much. 🧡 Even just telling me how you're feeling — tired, angry, numb — that's enough. What's on your heart?",
+            "anger":   "Your feelings matter so much. 💪 Would you like to talk more about what happened, or would practical strategies be more helpful right now?",
+        }
+        return emotion_nudges.get(emotion, "Take your time. 💙 What would help most right now — advice, resources, or just someone to listen? 🤝")
 
-    def _fallback_response(self, emotion, last_bot, session_info, topic, score, severity, stage):
-        # Visoka ozbiljnost
+    def _fallback_response(self, emotion, last_bot, session_info, topic, score, severity, stage, session_id):
+        # High severity — escalate regardless of stage
         if score > 0.7 or severity >= 4:
-            return (
+            candidate = (
                 "I'm really concerned about what you're going through. 🚨 This sounds serious. "
                 "Would you like to talk about immediate steps to protect yourself? "
                 "Or would you prefer I help you plan what to say to a trusted adult? "
                 "Your safety is the priority. I'm here to help either way. 💙"
             )
+            return self._unique_response(session_id, candidate, (
+                "Please remember: your safety comes first. 🚨 "
+                "If you're in immediate danger, call emergency services. "
+                "I'm here to help you take the next step. 💙"
+            ))
 
-        # Stage-svjesni fallback
+        # Stage-specific fallbacks
         stage_fallbacks = {
             "initial": (
                 "💙 I'm here and I'm listening. Would you like to tell me a bit more about what's been happening? "
@@ -977,21 +1041,27 @@ class LLMChatbot:
                 "Which step feels hardest or most unclear? I can dig deeper into any part of the plan with you. 🤝"
             ),
         }
+
         if stage in stage_fallbacks:
             candidate = stage_fallbacks[stage]
-            # Deduplikacija
-            if not self.sessions.is_repeat_response(None, candidate):
+            # FIX: pass session_id (not None) to is_repeat_response
+            if not self.sessions.is_repeat_response(session_id, candidate):
                 return candidate
+            # If it IS a repeat, fall through to personalised or emotion-based
 
-        # Personalizacija imenom
+        # Personalise with name if available
         if session_info and session_info.get("user_name"):
             name = session_info["user_name"]
-            return (
+            candidate = (
                 f"I'm here for you, {name}. 🤝 What's on your mind right now? "
-                f"How are you feeling about the **{topic}** situation? You can tell me anything — no judgment, just support. 💙"
+                f"How are you feeling about the **{topic}** situation? "
+                "You can tell me anything — no judgment, just support. 💙"
             )
+            return self._unique_response(session_id, candidate, (
+                f"Still here with you, {name}. 💙 No rush — whenever you're ready to talk, I'm listening. 🤝"
+            ))
 
-        # Emotion-based fallback s deduplikacijom
+        # Emotion-based fallbacks with dedup
         fallbacks = {
             "fear":    "It's okay to be scared. 💙 Your safety comes first. Would you like to talk about feeling safer, or would you prefer some practical advice on what to do next?",
             "sadness": "I hear your pain. 🧡 You don't deserve any of this. Would you like to talk more about how you're feeling, or would some resources for support be helpful?",
@@ -999,6 +1069,8 @@ class LLMChatbot:
             "default": "Thank you for sharing. 💙 What would be most helpful for you right now — talking more about what happened, getting specific advice, or just having someone listen without judgment?",
         }
         response = fallbacks.get(emotion, fallbacks["default"])
+
+        # Last-resort dedup: if this is identical to the very last bot message, vary it
         if response == last_bot:
             return (
                 "I'm here with you. 💙 What's one thing that would help you feel even a tiny bit better right now? "
