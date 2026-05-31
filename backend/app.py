@@ -10,6 +10,7 @@ import csv
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from topic_analyzer import TopicAnalyzer
+from chatbot import LLMChatbot
 
 # =====================================================================
 # INITIALIZATION
@@ -92,6 +93,10 @@ print("\n📥 Loading Topic Analyzer...")
 topic_analyzer = TopicAnalyzer("./models/topic_model")
 
 print("✅ All models loaded successfully!")
+
+print("🤖 Initializing LLM Chatbot...")
+llm_chatbot = LLMChatbot()
+print("✅ LLM Chatbot initialized!")
 
 # =====================================================================
 # HELPER FUNCTIONS
@@ -475,6 +480,95 @@ async def get_feedback_stats():
         "bullying": len(df[df['user_verdict'] == 'BULLYING_DETECTED']),
         "safe": len(df[df['user_verdict'] == 'SAFE']),
         "needs_finetune": total >= 50
+    }
+
+# =====================================================================
+# ENDPOINT: Start chat after analysis
+# =====================================================================
+@app.post("/api/chat/start")
+async def start_chat(input: TextInput):
+    # Prvo analiziraj tekst
+    analysis = await analyze_text(input)
+    sentiment = await analyze_sentiment(input)
+    ner = await extract_entities(input)  # ← DODAJ NER
+    
+    # Pripremi analysis za chatbot (sa SVE informacije)
+    topic_analysis = topic_analyzer.analyze_text(clean_text(input.text)) or {}
+    
+    EMOTION_MAP = {
+    "outrage":        "anger",
+    "annoyance":      "anger",
+    "disapproval":    "anger",
+    "disgust":        "anger",
+    "fear":           "fear",
+    "nervousness":    "nervousness",
+    "grief":          "grief",
+    "sadness":        "sadness",
+    "disappointment": "disappointment",
+    "embarrassment":  "sadness",
+    "remorse":        "sadness",
+}
+
+    chat_analysis = {
+        'emotion': EMOTION_MAP.get(sentiment.get('top_emotion', 'unknown'), 'default'),
+        'topic': topic_analysis.get('topic_category', 'general'),
+        'topic_category': topic_analysis.get('topic_category', 'general'),
+        'topic_keywords': topic_analysis.get('keywords', []),
+        'topic_severity': topic_analysis.get('severity', 2),
+        'decision': analysis['decision'],
+        'score': analysis['score'],
+        'entities': ner.get('entities', {})  # ← DODAJ ENTITETE
+    }
+
+    
+    # Create chat session
+    session_id = llm_chatbot.sessions.create_session(chat_analysis)
+    
+    # Generate first message
+    first_message = llm_chatbot.generate_first_message(chat_analysis)
+    
+    return {
+        'session_id': session_id,
+        'first_message': first_message,
+        'analysis': chat_analysis
+    }
+
+# =====================================================================
+# ENDPOINT: Continue chat
+# =====================================================================
+@app.post("/api/chat/message")
+async def chat_message(request: dict):
+    """
+    Send a message in an existing chat session
+    """
+    session_id = request.get('session_id')
+    user_message = request.get('message')
+    
+    if not session_id or not user_message:
+        return {"error": "Missing session_id or message"}, 400
+    
+    # Get session data
+    history = llm_chatbot.sessions.get_history(session_id)
+    analysis = llm_chatbot.sessions.get_analysis(session_id)
+    
+    if not analysis:
+        return {"error": "Session not found"}, 404
+    
+    # Generate response (proslijedi session_id)
+    bot_response = llm_chatbot.generate_response(
+        user_message=user_message,
+        history=history,
+        analysis=analysis,
+        session_id=session_id
+    )
+    
+    # Save to history
+    llm_chatbot.sessions.add_exchange(session_id, user_message, bot_response)
+    
+    return {
+        'session_id': session_id,
+        'response': bot_response,
+        'history_length': len(history) + 1
     }
 
 # =====================================================================
