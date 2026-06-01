@@ -7,6 +7,7 @@ import SupportChat from './components/SupportChat';
 import NEREntities from './components/NEREntities';
 import SentimentGauge from './components/SentimentGauge';
 import ReportSummary from './components/ReportSummary';
+import FloatingChat from './components/FloatingChat';
 
 const API_URL = 'http://localhost:8000';
 
@@ -98,6 +99,7 @@ function App() {
     { id: 'support', label: '💌 Support', icon: '💌' },
     { id: 'entities', label: '🔍 Analysis', icon: '🔍' },
     { id: 'report', label: '📋 Report', icon: '📋' },
+    { id: 'llm-chat', label: '💬 Chat Support', icon: '💬' },
   ];
 
   return (
@@ -243,6 +245,14 @@ function App() {
           </div>
         )}
       </main>
+      {/* Floating Chat Button - prikazuje se nakon analize */}
+    {result && (
+      <FloatingChat 
+        initialText={result.original_text}
+        emotion={sentimentResult?.top_emotion}
+        topic={topicAnalysis?.category}
+      />
+    )}
     </div>
   );
 }

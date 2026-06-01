@@ -52,3 +52,34 @@ body {
 .animate-fadeOut {
   animation: fadeOut 3s ease forwards;
 }
+
+/* Floating Chat Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Scrollbar styling for chat */
+.floating-chat-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.floating-chat-messages::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.floating-chat-messages::-webkit-scrollbar-thumb {
+  background: #c4b5fd;
+  border-radius: 10px;
+}
