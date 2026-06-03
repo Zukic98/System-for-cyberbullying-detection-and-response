@@ -10,7 +10,7 @@ import csv
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 from topic_analyzer import TopicAnalyzer
-from chatbot import LLMChatbot
+from chatbot_llm import LLMChatbotV2 as LLMChatbot
 from incident_sumarizator import IncidentSumarizator
 
 # =====================================================================
@@ -138,7 +138,7 @@ except Exception as e:
 print("✅ All models loaded successfully!")
 
 print("🤖 Initializing LLM Chatbot...")
-llm_chatbot = LLMChatbot()
+llm_chatbot = LLMChatbot(model_name="llama3.2:3b", use_llm=True)
 print("✅ LLM Chatbot initialized!")
 
 # =====================================================================
@@ -578,6 +578,7 @@ async def start_chat(input: TextInput):
     "disappointment": "disappointment",
     "embarrassment":  "sadness",
     "remorse":        "sadness",
+    "embarrassment":  "embarrassment",
 }
 
     chat_analysis = {
