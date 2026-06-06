@@ -7,7 +7,7 @@ import ollama
 from chatbot import ChatSession, LLMChatbot, TOPIC_DESCRIPTIONS, CRISIS_PHRASES
 
 # =========================================================
-# ULTRA-JEDNOSTAVAN SYSTEM PROMPT
+# SYSTEM PROMPT
 # =========================================================
 
 SYSTEM_PROMPT = """You are SafeBot, a kind support assistant for people facing cyberbullying.
@@ -107,7 +107,7 @@ class LLMChatbotV2(LLMChatbot):
         if not text:
             return None
         
-        # Ukloni višak emojija (ostavi samo prvi)
+        
         # Pronađi sve emojije
         emoji_pattern = re.compile("["
             "\U0001F600-\U0001F64F"  # emoticons
@@ -184,16 +184,16 @@ class LLMChatbotV2(LLMChatbot):
             
         return text
     
-    def _build_llm_context(self, user_message, analysis, history, session_info):
+    def _build_llm_context(self, user_message, analysis, history, session_id):
         """Context builder koji je svjestan da li je savjet već dat"""
         
         user_lower = user_message.lower()
-        stage = session_info.get("stage", "initial")
+        stage = self.sessions.get_stage(session_id) if session_id else "initial"
         
         # Detektuj intent
         if self._is_direct_threat(user_message):
             intent = "User mentioned threats - needs urgent safety advice NOW"
-        elif self._is_affirmation(user_message) and self.sessions.was_advice_offered(session_info):
+        elif self._is_affirmation(user_message) and self.sessions.was_advice_offered(session_id):
             intent = "User said YES to advice - give CONCRETE steps NOW, do NOT ask again"
         elif self._is_asking_question(user_message):
             intent = "User is asking for advice - give CONCRETE steps, do NOT ask if they want advice"
@@ -362,9 +362,8 @@ Respond as SafeBot (2-3 sentences, EXACTLY ONE emoji, NO questions about whether
             print(f"   📍 Stage updated: venting")
     
     def _llm_generate(self, session_id, user_message, analysis, history, session_info, extra=None):
-        """Generate response with progressive simplification"""
         
-        context = self._build_llm_context(user_message, analysis, history, session_info)
+        context = self._build_llm_context(user_message, analysis, history, session_id)  # ← proslijedi session_id
         if extra:
             context += f"\n\n{extra}"
         
