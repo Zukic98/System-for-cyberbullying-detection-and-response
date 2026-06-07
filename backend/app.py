@@ -300,13 +300,19 @@ async def analyze_sentiment(input: TextInput):
         top_score = emotions_result[top_emotion]
         
       
-        negative_emotions = ["anger", "annoyance", "disappointment", "disapproval", "disgust", "fear", "grief", "nervousness", "outrage", "sadness"]
-        positive_emotions = ["admiration", "amusement", "approval", "caring", "desire", "excitement", "gratitude", "joy", "love", "optimism"]
-        
+        negative_emotions = ["anger", "annoyance", "disappointment", "disapproval", "disgust", "fear", "grief", "nervousness", "outrage", "sadness", "remorse"]
+        positive_emotions = ["admiration", "amusement", "approval", "caring", "desire", "excitement", "gratitude", "joy", "love", "optimism", "relief"] 
+
         pos_score = sum(emotions_result.get(e, 0.0) for e in positive_emotions)
         neg_score = sum(emotions_result.get(e, 0.0) for e in negative_emotions)
-        neu_score = emotions_result.get("neutral", 0.0) + emotions_result.get("confusion", 0.0) + emotions_result.get("curiosity", 0.0) + emotions_result.get("surprise", 0.0)
-        
+        neu_score = (
+            emotions_result.get("neutral", 0.0) + 
+            emotions_result.get("confusion", 0.0) + 
+            emotions_result.get("curiosity", 0.0) + 
+            emotions_result.get("surprise", 0.0) +
+            emotions_result.get("realization", 0.0)
+        )
+                
         total_score = pos_score + neg_score + neu_score
         if total_score > 0:
             pos_pct = round(pos_score / total_score, 4)

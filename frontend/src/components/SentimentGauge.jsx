@@ -15,12 +15,33 @@ const SentimentGauge = ({ sentimentResult }) => {
 
   // Dictionary for specific emotion emojis to make the UI dynamic
   const emotionEmojis = {
-    anger: "😡", annoyance: "😑", disappointment: "😞", disapproval: "👎",
-    disgust: "🤢", fear: "😨", grief: "😢", nervousness: "😰", outrage: "🤬",
-    sadness: "😭", admiration: "👏", amusement: "😄", approval: "👍",
-    caring: "🥰", desire: "❤️", excitement: "🤩", gratitude: "🙏",
-    joy: "🥳", love: "💖", optimism: "🌅", confusion: "😕", curiosity: "🤔",
-    surprise: "😲", neutral: "😐"
+    anger: "😡", 
+    annoyance: "😑", 
+    disappointment: "😞", 
+    disapproval: "👎",
+    disgust: "🤢", 
+    fear: "😨", 
+    grief: "😢", 
+    nervousness: "😰", 
+    outrage: "🤬",
+    sadness: "😭", 
+    remorse: "😔", 
+    admiration: "👏", 
+    amusement: "😄", 
+    approval: "👍",
+    caring: "🥰", 
+    desire: "❤️", 
+    excitement: "🤩", 
+    gratitude: "🙏",
+    joy: "🥳", 
+    love: "💖", 
+    optimism: "🌅", 
+    relief: "😮‍💨", 
+    confusion: "😕", 
+    curiosity: "🤔",
+    surprise: "😲", 
+    neutral: "😐",
+    realization: "💡" 
   };
 
   return (
