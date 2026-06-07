@@ -8,7 +8,7 @@ import numpy as np
 import os
 import csv
 from datetime import datetime
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForTokenClassification, pipeline
 from topic_analyzer import TopicAnalyzer
 from chatbot_llm import LLMChatbotV2 as LLMChatbot
 from incident_sumarizator import IncidentSumarizator
@@ -111,9 +111,30 @@ GO_EMOTIONS_LABELS = [
 print("\n📥 Loading Topic Analyzer...")
 topic_analyzer = TopicAnalyzer("./models/topic_model")
 
+def ensure_local_ner_model(repo_id: str, local_dir: str):
+    if os.path.isdir(local_dir):
+        return local_dir
+
+    os.makedirs(local_dir, exist_ok=True)
+    print(f"Downloading NER model {repo_id} into {local_dir}...")
+    tokenizer = AutoTokenizer.from_pretrained(repo_id)
+    tokenizer.save_pretrained(local_dir)
+    model = AutoModelForTokenClassification.from_pretrained(repo_id)
+    model.save_pretrained(local_dir)
+    print(f"NER model downloaded and saved to {local_dir}")
+    return local_dir
+
 # Model 7: NER
 print("   Loading NER model...")
-NER_MODEL_NAME = "Davlan/bert-base-multilingual-cased-ner-hrl"
+NER_LOCAL_MODEL = os.path.join(MODELS_PATH, 'ner_davlan_bert_base_multilingual_cased_ner_hrl')
+NER_MODEL_NAME = NER_LOCAL_MODEL
+if not os.path.isdir(NER_LOCAL_MODEL):
+    try:
+        NER_MODEL_NAME = ensure_local_ner_model("Davlan/bert-base-multilingual-cased-ner-hrl", NER_LOCAL_MODEL)
+    except Exception as e:
+        print(f"Failed to download local NER model: {e}")
+        NER_MODEL_NAME = "Davlan/bert-base-multilingual-cased-ner-hrl"
+
 NER_DEVICE = 0 if torch.cuda.is_available() else -1
 try:
     ner_pipeline = pipeline(
@@ -129,8 +150,9 @@ except Exception as e:
 
 # Initialize abstractive summarizer (optional; may download model)
 try:
-    summarizer = IncidentSumarizator()
-    print("Summarizer loaded: facebook/bart-large-cnn")
+    SUMMARIZER_LOCAL_MODEL = os.path.join(MODELS_PATH, 'bart_large_cnn')
+    summarizer = IncidentSumarizator("facebook/bart-large-cnn", cache_dir=SUMMARIZER_LOCAL_MODEL)
+    print("Summarizer loaded")
 except Exception as e:
     summarizer = None
     print(f"Summarizer not available: {e}")

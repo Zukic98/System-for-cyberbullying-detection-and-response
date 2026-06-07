@@ -1,15 +1,39 @@
+import os
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 
 class IncidentSumarizator:
-    def __init__(self, model_name="facebook/bart-large-cnn"):
+    def __init__(self, model_name_or_path="facebook/bart-large-cnn", cache_dir=None):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.cache_dir = cache_dir
+        self.model_name_or_path = model_name_or_path
 
-        print(f"Učitavam model i tokenizer ({model_name})...")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(self.device)
+        if cache_dir is not None and os.path.isdir(cache_dir):
+            print(f"Loading summarizer from local cache: {cache_dir}")
+            self.model_name_or_path = cache_dir
+            self.local_files_only = True
+        else:
+            self.local_files_only = os.path.isdir(model_name_or_path)
+
+        if not self.local_files_only and cache_dir is not None:
+            self._download_local_model(model_name_or_path, cache_dir)
+            self.model_name_or_path = cache_dir
+            self.local_files_only = True
+
+        print(f"Učitavam model i tokenizer ({self.model_name_or_path})...")
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path, local_files_only=self.local_files_only)
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name_or_path, local_files_only=self.local_files_only).to(self.device)
         print("Model za sumarizaciju je uspješno učitan!")
+
+    def _download_local_model(self, repo_id: str, local_dir: str):
+        os.makedirs(local_dir, exist_ok=True)
+        print(f"Downloading summarization model {repo_id} to {local_dir}...")
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        tokenizer.save_pretrained(local_dir)
+        model = AutoModelForSeq2SeqLM.from_pretrained(repo_id)
+        model.save_pretrained(local_dir)
+        print(f"Saved summarization model to {local_dir}")
 
     def generisi_izvjestaj(self, cijeli_razgovor, max_duzina=80, min_duzina=30):
         if not cijeli_razgovor or not isinstance(cijeli_razgovor, str):
