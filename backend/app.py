@@ -100,12 +100,12 @@ models['goemotions'] = AutoModelForSequenceClassification.from_pretrained(
 
 # Lista svih 28 emocija tačno onim redoslijedom kako ih GoEmotions dataset ima registrirane
 GO_EMOTIONS_LABELS = [
-    "admiration", "amusement", "anger", "annoyance", "approval", "caring", 
-    "confusion", "curiosity", "desire", "disappointment", "disapproval", 
-    "disgust", "embarrassment", "excitement", "fear", "gratitude", "grief", 
-    "joy", "love", "nervousness", "optimism", "outrage", "sadness", 
-    "surprise", "neutral"
-] 
+    "admiration", "amusement", "anger", "annoyance", "approval", "caring",
+    "confusion", "curiosity", "desire", "disappointment", "disapproval",
+    "disgust", "embarrassment", "excitement", "fear", "gratitude", "grief",
+    "joy", "love", "nervousness", "optimism", "pride", "realization",
+    "relief", "remorse", "sadness", "surprise", "neutral"
+]
 
 # Model Topic Analyzer
 print("\n📥 Loading Topic Analyzer...")
@@ -322,8 +322,9 @@ async def analyze_sentiment(input: TextInput):
         top_score = emotions_result[top_emotion]
         
       
-        negative_emotions = ["anger", "annoyance", "disappointment", "disapproval", "disgust", "fear", "grief", "nervousness", "outrage", "sadness", "remorse"]
-        positive_emotions = ["admiration", "amusement", "approval", "caring", "desire", "excitement", "gratitude", "joy", "love", "optimism", "relief"] 
+        negative_emotions = ["anger", "annoyance", "disappointment", "disapproval", "disgust", "fear", "grief", "nervousness", "sadness", "remorse", "embarrassment"]
+
+        positive_emotions = ["admiration", "amusement", "approval", "caring", "desire", "excitement", "gratitude", "joy", "love", "optimism", "relief", "pride"]
 
         pos_score = sum(emotions_result.get(e, 0.0) for e in positive_emotions)
         neg_score = sum(emotions_result.get(e, 0.0) for e in negative_emotions)

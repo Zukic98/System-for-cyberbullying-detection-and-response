@@ -15,6 +15,7 @@ const SentimentGauge = ({ sentimentResult }) => {
 
   // Dictionary for specific emotion emojis to make the UI dynamic
   const emotionEmojis = {
+    // Negativne emocije
     anger: "😡", 
     annoyance: "😑", 
     disappointment: "😞", 
@@ -23,10 +24,12 @@ const SentimentGauge = ({ sentimentResult }) => {
     fear: "😨", 
     grief: "😢", 
     nervousness: "😰", 
-    outrage: "🤬",
     sadness: "😭", 
     remorse: "😔", 
-    admiration: "👏", 
+    embarrassment: "😳", 
+
+    // Pozitivne emocije
+    admiration: "👏",
     amusement: "😄", 
     approval: "👍",
     caring: "🥰", 
@@ -37,11 +40,14 @@ const SentimentGauge = ({ sentimentResult }) => {
     love: "💖", 
     optimism: "🌅", 
     relief: "😮‍💨", 
+    pride: "👑", 
+
+    // Neutralne / Kognitivne emocije
     confusion: "😕", 
     curiosity: "🤔",
     surprise: "😲", 
-    neutral: "😐",
-    realization: "💡" 
+    realization: "💡",
+    neutral: "😐" 
   };
 
   return (
