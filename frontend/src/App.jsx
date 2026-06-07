@@ -99,7 +99,6 @@ function App() {
     { id: 'support', label: '💌 Support', icon: '💌' },
     { id: 'entities', label: '🔍 Analysis', icon: '🔍' },
     { id: 'report', label: '📋 Report', icon: '📋' },
-    { id: 'llm-chat', label: '💬 Chat Support', icon: '💬' },
   ];
 
   return (
