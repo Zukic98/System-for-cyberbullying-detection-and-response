@@ -7,6 +7,7 @@ const FloatingChat = ({ initialText, emotion, topic }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
   const [chatStarted, setChatStarted] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -140,14 +141,51 @@ const FloatingChat = ({ initialText, emotion, topic }) => {
                   <p className="text-xs opacity-90">Here to listen and help 💙</p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="text-white/80 hover:text-white transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                {chatStarted && (
+                  <button
+                    onClick={async () => {
+                      // summarize chat on demand
+                      if (messages.length === 0 || summarizing) return;
+                      setSummarizing(true);
+                      try {
+                        const payload = { messages };
+                        const res = await axios.post('http://localhost:8000/api/summarize_chat', payload);
+                        const summaryText = res.data && res.data.summary ? res.data.summary : 'No summary available.';
+                        setMessages(prev => [
+                          ...prev,
+                          {
+                            id: Date.now() + 999,
+                            role: 'bot',
+                            text: `🔖 Chat summary:\n${summaryText}`,
+                            timestamp: new Date().toLocaleTimeString()
+                          }
+                        ]);
+                      } catch (err) {
+                        console.error('Summarize error', err);
+                        setMessages(prev => [
+                          ...prev,
+                          { id: Date.now() + 999, role: 'bot', text: "Failed to summarize chat.", timestamp: new Date().toLocaleTimeString() }
+                        ]);
+                      } finally {
+                        setSummarizing(false);
+                      }
+                    }}
+                    className="mr-2 px-3 py-1 bg-white/20 text-white rounded-full text-sm hover:bg-white/30 transition-colors"
+                    title="Summarize conversation"
+                  >
+                    {summarizing ? 'Summarizing...' : 'Summarize'}
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="text-white/80 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
             
             {/* Context info if available */}

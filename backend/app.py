@@ -500,6 +500,63 @@ async def summarize_text(input: TextInput):
         'method': 'extractive'
     }
 
+
+# =====================================================================
+# ENDPOINT: Summarize Chat Transcript (on-demand)
+# =====================================================================
+@app.post("/api/summarize_chat")
+async def summarize_chat(payload: dict):
+    """Expect payload: {"messages": [{"role": "user"|"bot", "text": "..."}, ...]}"""
+    messages = payload.get('messages') if isinstance(payload, dict) else None
+    if not messages or not isinstance(messages, list):
+        return {
+            'error': 'Invalid payload. Expected {"messages": [{"role","text"}, ...]}'
+        }
+
+    # Build a single text blob from messages, preserving role context
+    parts = []
+    for m in messages:
+        role = m.get('role', 'user')
+        text = m.get('text', '')
+        if not text:
+            continue
+        prefix = 'User: ' if role == 'user' else 'Assistant: '
+        parts.append(prefix + text)
+
+    transcript = '\n'.join(parts).strip()
+    if not transcript:
+        return {'error': 'Empty transcript'}
+
+    # Prefer abstractive summarizer when available
+    if 'summarizer' in globals() and summarizer is not None:
+        try:
+            summary = summarizer.generisi_izvjestaj(transcript)
+            return {
+                'original_length': len(transcript),
+                'summary_length': len(summary),
+                'summary': summary,
+                'method': 'abstractive'
+            }
+        except Exception as e:
+            print(f"Summarizer error (chat): {e}")
+
+    # Fallback extractive: pick first, middle, last substantive sentences
+    sentences = re.split(r'(?<=[.!?])\s+', transcript)
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+    if len(sentences) <= 3:
+        summary = transcript
+    else:
+        mid = len(sentences) // 2
+        selected = [sentences[0], sentences[mid], sentences[-1]]
+        summary = ' '.join(selected)
+
+    return {
+        'original_length': len(transcript),
+        'summary_length': len(summary),
+        'summary': summary,
+        'method': 'extractive'
+    }
+
 # =====================================================================
 # ENDPOINT: Health Check
 # =====================================================================
