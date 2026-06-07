@@ -185,6 +185,19 @@ class ChatSession:
         if s:
             s["advice_given"] = True
 
+    def mark_advice_offered(self, session_id):
+        """Označi da je savjet ponuđen u ovoj sesiji"""
+        s = self.sessions.get(session_id)
+        if s:
+            s["advice_given"] = True
+
+    def was_advice_offered(self, session_id):
+        """Provjerava da li je savjet već ponuđen u ovoj sesiji"""
+        s = self.sessions.get(session_id)
+        if not s:
+            return False
+        return s.get("advice_given", False)
+
     def set_entities(self, session_id, entities):
         s = self.sessions.get(session_id)
         if s:
